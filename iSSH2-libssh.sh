@@ -27,32 +27,33 @@ source "$BASEPATH/iSSH2-commons"
 
 set -e
 
-mkdir -p "$LIBSSH2DIR"
+LIBSSH_VERSION_PREFIX=`echo "$LIBSSH_VERSION" | cut -d'.' -f1,2`
 
-LIBSSH_TAR="libssh2-$LIBSSH_VERSION.tar.gz"
+mkdir -p "$LIBSSHDIR"
 
-downloadFile "http://www.libssh2.org/download/$LIBSSH_TAR" "$LIBSSH2DIR/$LIBSSH_TAR"
+LIBSSH_TAR="libssh-$LIBSSH_VERSION.tar.xz"
 
-LIBSSHSRC="$LIBSSH2DIR/src/"
+downloadFile "http://www.libssh.org/files/$LIBSSH_VERSION_PREFIX/$LIBSSH_TAR" "$LIBSSHDIR/$LIBSSH_TAR"
+
+LIBSSHSRC="$LIBSSHDIR/src/"
 mkdir -p "$LIBSSHSRC"
 
 set +e
 echo "Extracting $LIBSSH_TAR"
-tar -zxkf "$LIBSSH2DIR/$LIBSSH_TAR" -C "$LIBSSH2DIR/src" --strip-components 1 2>&-
+tar -zxkf "$LIBSSHDIR/$LIBSSH_TAR" -C "$LIBSSHSRC" --strip-components 1 2>&-
 set -e
 
-echo "Building Libssh2 $LIBSSH_VERSION:"
+echo "Building libssh $LIBSSH_VERSION:"
 
 for ARCH in $ARCHS
 do
   PLATFORM="$(platformName "$SDK_PLATFORM" "$ARCH")"
   OPENSSLDIR="$BASEPATH/openssl_$SDK_PLATFORM/"
-  PLATFORM_SRC="$LIBSSH2DIR/${PLATFORM}_$SDK_VERSION-$ARCH/src"
-  PLATFORM_OUT="$LIBSSH2DIR/${PLATFORM}_$SDK_VERSION-$ARCH/install"
-  LIPO_SSH2="$LIPO_SSH2 $PLATFORM_OUT/lib/libssh2.a"
+  PLATFORM_SRC="$LIBSSHDIR/${PLATFORM}_$SDK_VERSION-$ARCH/src"
+  PLATFORM_OUT="$LIBSSHDIR/${PLATFORM}_$SDK_VERSION-$ARCH/install"
 
-  if [[ -f "$PLATFORM_OUT/lib/libssh2.a" ]]; then
-    echo "libssh2.a for $ARCH already exists."
+  if [[ -f "$PLATFORM_OUT/libssh.dylib" ]]; then
+    echo "libssh.dylib for $ARCH already exists."
   else
     rm -rf "$PLATFORM_SRC"
     rm -rf "$PLATFORM_OUT"
@@ -60,7 +61,7 @@ do
     cp -R "$LIBSSHSRC" "$PLATFORM_SRC"
     cd "$PLATFORM_SRC"
 
-    LOG="$PLATFORM_OUT/build-libssh2.log"
+    LOG="$PLATFORM_OUT/build-libssh.log"
     touch $LOG
 
     if [[ "$ARCH" == arm64* ]]; then
@@ -69,30 +70,30 @@ do
       HOST="$ARCH-apple-darwin"
     fi
 
+    export OPENSSL_ROOT_DIR="$OPENSSLDIR"
     export DEVROOT="$DEVELOPER/Platforms/$PLATFORM.platform/Developer"
     export SDKROOT="$DEVROOT/SDKs/$PLATFORM$SDK_VERSION.sdk"
     export CC="$CLANG"
     export CPP="$CLANG -E"
     export CFLAGS="-arch $ARCH -pipe -no-cpp-precomp -isysroot $SDKROOT -m$SDK_PLATFORM-version-min=$MIN_VERSION $EMBED_BITCODE"
-    export CPPFLAGS="-arch $ARCH -pipe -no-cpp-precomp -isysroot $SDKROOT -m$SDK_PLATFORM-version-min=$MIN_VERSION"
+    export CPPFLAGS="-arch $ARCH -pipe -no-cpp-precomp -isysroot $SDKROOT -m$SDK_PLATFORM-version-min=$MIN_VERSIONi -I${prefix}/include -isystem${prefix}/include"
 
-    if [[ $(./configure --help | grep -c -- --with-openssl) -eq 0 ]]; then
-      CRYPTO_BACKEND_OPTION="--with-crypto=openssl"
-    else
-      CRYPTO_BACKEND_OPTION="--with-openssl"
-    fi
-
-    ./configure --host=$HOST --prefix="$PLATFORM_OUT" --disable-debug --disable-dependency-tracking --disable-silent-rules --disable-examples-build --with-libz $CRYPTO_BACKEND_OPTION --with-libssl-prefix="$OPENSSLDIR" --disable-shared --enable-static  >> "$LOG" 2>&1
+    mkdir build
+    cd build
+    cmake -DOPENSSL_INCLUDE_DIR="$OPENSSLDIR/include" -DCMAKE_BUILD_TYPE=Release -DWITH_SERVER=OFF -DWITH_GCRYPT=OFF -DWITH_INTERNAL_DOC=OFF -DWITH_LIBZ=ON -DWITH_GSSAPI=OFF -DCMAKE_LIBRARY_OUTPUT_DIRECTORY="$PLATFORM_OUT" -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY="$PLATFORM_OUT" -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$PLATFORM_OUT" ..
 
     make >> "$LOG" 2>&1
-    make -j "$BUILD_THREADS" install >> "$LOG" 2>&1
 
     echo "- $PLATFORM $ARCH done!"
+    file "$LIBSSHDIR/${PLATFORM}_$SDK_VERSION-$ARCH/src/build/lib/libssh.dylib"
+    cp -L "$PLATFORM_SRC/build/lib/libssh.dylib" "$PLATFORM_OUT"
+    ls -la "$PLATFORM_OUT"
   fi
 done
 
-lipoFatLibrary "$LIPO_SSH2" "$BASEPATH/libssh2_$SDK_PLATFORM/lib/libssh2.a"
+mkdir -p "$BASEPATH/libssh_$SDK_PLATFORM/lib/"
+cp "$PLATFORM_OUT/libssh.dylib" "$BASEPATH/libssh_$SDK_PLATFORM/lib/libssh.dylib"
 
-importHeaders "$LIBSSHSRC/include/" "$BASEPATH/libssh2_$SDK_PLATFORM/include"
+importHeaders "$LIBSSHSRC/include/libssh" "$BASEPATH/libssh_$SDK_PLATFORM/include"
 
 echo "Building done."

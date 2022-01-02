@@ -51,7 +51,7 @@ getLibssh2Version () {
     LIBSSH_VERSION=`git ls-remote --tags https://github.com/libssh2/libssh2.git | egrep "libssh2-[0-9]+(\.[0-9])*[a-zA-Z]?$" | cut -f 2 -d - | sort -t . -r | head -n 1`
     LIBSSH_AUTO=true
   else
-    >&2 echo "Install git to automatically get the latest Libssh2 version or use the --libssh2 argument"
+    >&2 echo "Install git to automatically get the latest libssh2 version or use the --libssh2 argument"
     >&2 echo
     >&2 echo "Try '$SCRIPTNAME --help' for more information."
     exit 2
@@ -82,18 +82,19 @@ usageHelp () {
   echo
   echo "Usage: $SCRIPTNAME.sh [options]"
   echo
-  echo "This script download and build OpenSSL and Libssh2 libraries."
+  echo "This script download and build OpenSSL and libssh2 libraries."
   echo
   echo "Options:"
   echo "  -a, --archs=[ARCHS]       build for [ARCHS] architectures"
   echo "  -p, --platform=PLATFORM   build for PLATFORM platform"
   echo "  -v, --min-version=VERS    set platform minimum version to VERS"
   echo "  -s, --sdk-version=VERS    use SDK version VERS"
-  echo "  -l, --libssh2=VERS        download and build Libssh2 version VERS"
+  echo "  -l, --libssh=VERS         download and build libssh2 ior libssh version VERS"
   echo "  -o, --openssl=VERS        download and build OpenSSL version VERS"
   echo "  -x, --xcodeproj=PATH      get info from the project (requires TARGET)"
   echo "  -t, --target=TARGET       get info from the target (requires XCODEPROJ)"
-  echo "      --build-only-openssl  build OpenSSL and skip Libssh2"
+  echo "      --build-libssh        build libssh and skip libssh2 - must specify version with --libssh"
+  echo "      --build-only-openssl  build OpenSSL and skip libssh2"
   echo "      --no-clean            do not clean build folder"
   echo "      --no-bitcode          don't embed bitcode"
   echo "  -h, --help                display this help and exit"
@@ -117,7 +118,8 @@ export EMBED_BITCODE="-fembed-bitcode"
 
 BUILD_OSX=false
 BUILD_SSL=true
-BUILD_SSH=true
+BUILD_SSH=false
+BUILD_SSH2=true
 CLEAN_BUILD=true
 
 XCODE_PROJECT=
@@ -141,13 +143,14 @@ while getopts 'a:p:l:o:v:s:x:t:h-' OPTION ; do
          --archs) ARCHS="$OPTARG" ;;
          --platform) SDK_PLATFORM="$OPTARG" ;;
          --openssl) LIBSSL_VERSION="$OPTARG" ;;
-         --libssh2) LIBSSH_VERSION="$OPTARG" ;;
+         --libssh) LIBSSH_VERSION="$OPTARG" ;;
          --sdk-version) SDK_VERSION="$OPTARG" ;;
          --min-version) MIN_VERSION="$OPTARG" ;;
          --xcodeproj) XCODE_PROJECT="$OPTARG" ;;
          --target) TARGET_NAME="$OPTARG" ;;
-         --build-only-openssl) BUILD_SSH=false ;;
-         --only-print-env) BUILD_SSL=false; BUILD_SSH=false ;;
+         --build-only-openssl) BUILD_SSH2=false ;;
+         --build-libssh) BUILD_SSH=true BUILD_SSH2=false ;;
+         --only-print-env) BUILD_SSL=false; BUILD_SSH2=false ;;
          --osx) BUILD_OSX=true ;;
          --no-bitcode) EMBED_BITCODE="" ;;
          --no-clean) CLEAN_BUILD=false ;;
@@ -269,15 +272,16 @@ export DEVELOPER=`xcode-select --print-path`
 export BASEPATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export TEMPPATH="$TMPDIR$SCRIPTNAME"
 export LIBSSLDIR="$TEMPPATH/openssl-$LIBSSL_VERSION"
-export LIBSSHDIR="$TEMPPATH/libssh2-$LIBSSH_VERSION"
+export LIBSSHDIR="$TEMPPATH/libssh-$LIBSSH_VERSION"
+export LIBSSH2DIR="$TEMPPATH/libssh2-$LIBSSH_VERSION"
 
 #Env
 
 echo
 if [[ $LIBSSH_AUTO == true ]]; then
-  echo "Libssh2 version: $LIBSSH_VERSION (Automatically detected)"
+  echo "libssh2 version: $LIBSSH_VERSION (Automatically detected)"
 else
-  echo "Libssh2 version: $LIBSSH_VERSION"
+  echo "libssh2 version: $LIBSSH_VERSION"
 fi
 
 if [[ $LIBSSL_AUTO == true ]]; then
@@ -307,9 +311,13 @@ if [[ $BUILD_SSL == true ]]; then
 fi
 
 if [[ $BUILD_SSH == true ]]; then
+  "$BASEPATH/iSSH2-libssh.sh" || cleanupFail $CLEAN_BUILD
+fi
+
+if [[ $BUILD_SSH2 == true ]]; then
   "$BASEPATH/iSSH2-libssh2.sh" || cleanupFail $CLEAN_BUILD
 fi
 
-if [[ $BUILD_SSL == true ]] || [[ $BUILD_SSH == true ]]; then
+if [[ $BUILD_SSL == true ]] || [[ $BUILD_SSH == true ]] || [[ $BUILD_SSH2 == true ]]; then
   cleanupAll $CLEAN_BUILD
 fi

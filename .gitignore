@@ -1,5 +1,5 @@
 tmp
 openssl*
-libssh2*
+libssh*
 libressl*
 .DS_Store
